@@ -149,81 +149,66 @@
       (quality.preview === 'success' ? previewElement : undefined) ??
       (quality.thumbnail === 'success' ? thumbnailElement : undefined);
   });
-
-  const zoomTransform = $derived.by(() => {
-    const { currentZoom, currentPositionX, currentPositionY } = assetViewerManager.zoomState;
-    if (currentZoom === 1 && currentPositionX === 0 && currentPositionY === 0) {
-      return undefined;
-    }
-    return `translate(${currentPositionX}px, ${currentPositionY}px) scale(${currentZoom})`;
-  });
 </script>
 
 <div class="relative h-full w-full overflow-hidden will-change-transform" bind:this={ref}>
   {@render backdrop?.()}
 
-  <!-- pointer-events-none so events pass through to the container where zoom-image listens -->
-  <div
-    class="absolute inset-0 pointer-events-none"
-    style:transform={zoomTransform}
-    style:transform-origin={zoomTransform ? '0 0' : undefined}
-  >
-    <div class="absolute" style:left style:top style:width style:height>
-      {#if show.alphaBackground}
-        <AlphaBackground />
-      {/if}
+  <div class="absolute inset-0 pointer-events-none" style:left style:top style:width style:height>
+    {#if show.alphaBackground}
+      <AlphaBackground />
+    {/if}
 
-      {#if show.thumbhash}
-        {#if asset.thumbhash}
-          <!-- Thumbhash / spinner layer  -->
-          <canvas use:thumbhash={{ base64ThumbHash: asset.thumbhash }} class="h-full w-full absolute"></canvas>
-        {:else if show.spinner}
-          <DelayedLoadingSpinner />
-        {/if}
+    {#if show.thumbhash}
+      {#if asset.thumbhash}
+        <!-- Thumbhash / spinner layer  -->
+        <canvas use:thumbhash={{ base64ThumbHash: asset.thumbhash }} class="h-full w-full absolute"></canvas>
+      {:else if show.spinner}
+        <DelayedLoadingSpinner />
       {/if}
+    {/if}
 
-      {#if show.thumbnail}
-        <ImageLayer
-          {adaptiveImageLoader}
-          {width}
-          {height}
-          quality="thumbnail"
-          src={status.urls.thumbnail}
-          alt=""
-          role="presentation"
-          bind:ref={thumbnailElement}
-        />
-      {/if}
+    {#if show.thumbnail}
+      <ImageLayer
+        {adaptiveImageLoader}
+        {width}
+        {height}
+        quality="thumbnail"
+        src={status.urls.thumbnail}
+        alt=""
+        role="presentation"
+        bind:ref={thumbnailElement}
+      />
+    {/if}
 
-      {#if show.brokenAsset}
-        <BrokenAsset class="text-xl h-full w-full absolute" />
-      {/if}
+    {#if show.brokenAsset}
+      <BrokenAsset class="text-xl h-full w-full absolute" />
+    {/if}
 
-      {#if show.preview}
-        <ImageLayer
-          {adaptiveImageLoader}
-          {alt}
-          {width}
-          {height}
-          {overlays}
-          quality="preview"
-          src={status.urls.preview}
-          bind:ref={previewElement}
-        />
-      {/if}
+    {#if show.preview}
+      <ImageLayer
+        {adaptiveImageLoader}
+        {alt}
+        {width}
+        {height}
+        {overlays}
+        quality="preview"
+        src={status.urls.preview}
+        bind:ref={previewElement}
+      />
+    {/if}
 
-      {#if show.original}
-        <ImageLayer
-          {adaptiveImageLoader}
-          {alt}
-          {width}
-          {height}
-          {overlays}
-          quality="original"
-          src={status.urls.original}
-          bind:ref={originalElement}
-        />
-      {/if}
-    </div>
+    {#if show.original}
+      <ImageLayer
+        {adaptiveImageLoader}
+        {alt}
+        {width}
+        {height}
+        {overlays}
+        quality="original"
+        src={status.urls.original}
+        bind:ref={originalElement}
+      />
+    {/if}
   </div>
 </div>

@@ -176,6 +176,7 @@
   onDestroy(() => {
     activityManager.reset();
     assetViewerManager.closeEditor();
+    isFaceEditMode.value = false;
     syncAssetViewerOpenClass(false);
     preloadManager.destroy();
   });
@@ -358,21 +359,30 @@
     }
   };
 
+  const refreshOcr = async () => {
+    ocrManager.clear();
+    if (sharedLink) {
+      return;
+    }
+
+    await ocrManager.getAssetOcr(asset.id);
+  };
+
   const refresh = async () => {
     await refreshStack();
-    ocrManager.clear();
-    if (!sharedLink) {
-      if (previewStackedAsset) {
-        await ocrManager.getAssetOcr(previewStackedAsset.id);
-      }
-      await ocrManager.getAssetOcr(asset.id);
-    }
+    await refreshOcr();
   };
 
   $effect(() => {
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     asset;
     untrack(() => handlePromiseError(refresh()));
+  });
+
+  $effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    previewStackedAsset;
+    untrack(() => handlePromiseError(refreshOcr()));
   });
 
   let lastCursor = $state<AssetCursor>();
@@ -568,6 +578,47 @@
         <OcrButton />
       </div>
     {/if}
+
+    {#if stack && withStacked && !assetViewerManager.isShowEditor}
+      {@const stackedAssets = stack.assets}
+      <div
+        id="stack-slideshow"
+        class="absolute bottom-0 max-w-[calc(100%-5rem)] col-span-4 col-start-1 pointer-events-none"
+      >
+        <div
+          role="presentation"
+          class="relative inline-flex flex-row flex-nowrap max-w-full overflow-x-auto overflow-y-hidden horizontal-scrollbar pointer-events-auto"
+          onmouseleave={() => (previewStackedAsset = undefined)}
+        >
+          {#each stackedAssets as stackedAsset (stackedAsset.id)}
+            <div
+              class={['inline-block px-1 relative transition-all pb-2']}
+              style:bottom={stackedAsset.id === asset.id ? '0' : '-10px'}
+            >
+              <Thumbnail
+                imageClass={{ 'border-2 border-white': stackedAsset.id === asset.id }}
+                brokenAssetClass="text-xs"
+                dimmed={stackedAsset.id !== asset.id}
+                asset={toTimelineAsset(stackedAsset)}
+                onClick={() => {
+                  cursor.current = stackedAsset;
+                  previewStackedAsset = undefined;
+                }}
+                onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}
+                readonly
+                thumbnailSize={stackedAsset.id === asset.id ? stackSelectedThumbnailSize : stackThumbnailSize}
+                showStackedIcon={false}
+                disableLinkMouseOver
+              />
+
+              <div class="w-full flex place-items-center place-content-center">
+                <div class={['w-2 h-2 rounded-full flex mt-0.5', { 'bg-white': stackedAsset.id === asset.id }]}></div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !isFaceEditMode.value && nextAsset}
@@ -592,42 +643,6 @@
           <EditorPanel {asset} onClose={closeEditor} />
         </div>
       {/if}
-    </div>
-  {/if}
-
-  {#if stack && withStacked && !assetViewerManager.isShowEditor}
-    {@const stackedAssets = stack.assets}
-    <div id="stack-slideshow" class="absolute bottom-0 w-full col-span-4 col-start-1 pointer-events-none">
-      <div class="relative flex flex-row no-wrap overflow-x-auto overflow-y-hidden horizontal-scrollbar">
-        {#each stackedAssets as stackedAsset (stackedAsset.id)}
-          <div
-            class={['inline-block px-1 relative transition-all pb-2 pointer-events-auto']}
-            style:bottom={stackedAsset.id === asset.id ? '0' : '-10px'}
-          >
-            <Thumbnail
-              imageClass={{ 'border-2 border-white': stackedAsset.id === asset.id }}
-              brokenAssetClass="text-xs"
-              dimmed={stackedAsset.id !== asset.id}
-              asset={toTimelineAsset(stackedAsset)}
-              onClick={() => {
-                cursor.current = stackedAsset;
-                previewStackedAsset = undefined;
-              }}
-              onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}
-              readonly
-              thumbnailSize={stackedAsset.id === asset.id ? stackSelectedThumbnailSize : stackThumbnailSize}
-              showStackedIcon={false}
-              disableLinkMouseOver
-            />
-
-            {#if stackedAsset.id === asset.id}
-              <div class="w-full flex place-items-center place-content-center">
-                <div class="w-2 h-2 bg-white rounded-full flex mt-0.5"></div>
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
     </div>
   {/if}
 

@@ -7,8 +7,10 @@ import {
   AssetVisibility,
   UserAvatarColor,
   type AlbumResponseDto,
+  type AssetFaceWithoutPersonResponseDto,
   type AssetResponseDto,
   type ExifResponseDto,
+  type PersonWithFacesResponseDto,
   type TimeBucketAssetResponseDto,
   type TimeBucketsResponseDto,
   type UserResponseDto,
@@ -284,7 +286,16 @@ const createDefaultOwner = (ownerId: string) => {
  * Convert a TimelineAssetConfig to a full AssetResponseDto
  * This matches the response from GET /api/assets/:id
  */
-export function toAssetResponseDto(asset: MockTimelineAsset, owner?: UserResponseDto): AssetResponseDto {
+export type FaceData = {
+  people: PersonWithFacesResponseDto[];
+  unassignedFaces: AssetFaceWithoutPersonResponseDto[];
+};
+
+export function toAssetResponseDto(
+  asset: MockTimelineAsset,
+  owner?: UserResponseDto,
+  faceData?: FaceData,
+): AssetResponseDto {
   const now = new Date().toISOString();
 
   // Default owner if not provided
@@ -338,8 +349,8 @@ export function toAssetResponseDto(asset: MockTimelineAsset, owner?: UserRespons
     exifInfo,
     livePhotoVideoId: asset.livePhotoVideoId,
     tags: [],
-    people: [],
-    unassignedFaces: [],
+    people: faceData?.people ?? [],
+    unassignedFaces: faceData?.unassignedFaces ?? [],
     stack: asset.stack,
     isOffline: false,
     hasMetadata: true,

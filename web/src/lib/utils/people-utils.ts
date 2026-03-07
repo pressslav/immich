@@ -37,6 +37,38 @@ export const getBoundingBox = (faces: Faces[], metrics: ContentMetrics): Boundin
   return boxes;
 };
 
+export type FaceRectState = {
+  left: number;
+  top: number;
+  scaleX: number;
+  scaleY: number;
+};
+
+export type ResizeContext = {
+  previousOffsetX: number;
+  previousOffsetY: number;
+  previousContentWidth: number;
+};
+
+export const scaleFaceRectOnResize = (
+  faceRect: FaceRectState,
+  previous: ResizeContext,
+  newOffsetX: number,
+  newOffsetY: number,
+  newContentWidth: number,
+): FaceRectState => {
+  const scale = newContentWidth / previous.previousContentWidth;
+  const imageRelativeLeft = (faceRect.left - previous.previousOffsetX) * scale;
+  const imageRelativeTop = (faceRect.top - previous.previousOffsetY) * scale;
+
+  return {
+    left: newOffsetX + imageRelativeLeft,
+    top: newOffsetY + imageRelativeTop,
+    scaleX: faceRect.scaleX * scale,
+    scaleY: faceRect.scaleY * scale,
+  };
+};
+
 export const zoomImageToBase64 = async (
   face: AssetFaceResponseDto,
   assetId: string,

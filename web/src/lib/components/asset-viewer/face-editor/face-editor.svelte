@@ -1,10 +1,12 @@
 <script lang="ts">
   import ImageThumbnail from '$lib/components/assets/thumbnail/image-thumbnail.svelte';
+  import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { assetViewingStore } from '$lib/stores/asset-viewing.store';
   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
   import { getPeopleThumbnailUrl } from '$lib/utils';
   import { getNaturalSize, scaleToFit } from '$lib/utils/container-utils';
   import { handleError } from '$lib/utils/handle-error';
+  import { scaleFaceRectOnResize } from '$lib/utils/people-utils';
   import { createFace, getAllPeople, type PersonResponseDto } from '@immich/sdk';
   import { Button, Input, modalManager, toastManager } from '@immich/ui';
   import { Canvas, InteractiveFabricObject, Rect } from 'fabric';
@@ -31,6 +33,10 @@
 
   let searchTerm = $state('');
   let faceBoxPosition = $state({ left: 0, top: 0, width: 0, height: 0 });
+  let initialized = false;
+  let previousContentWidth = 0;
+  let previousOffsetX = 0;
+  let previousOffsetY = 0;
 
   let filteredCandidates = $derived(
     searchTerm
@@ -77,9 +83,37 @@
     setDefaultFaceRectanglePosition(faceRect);
   };
 
-  onMount(async () => {
+  onMount(() => {
     setupCanvas();
-    await getPeople();
+    void getPeople();
+
+    if (!canvas) {
+      return;
+    }
+
+    canvas.selection = false;
+
+    const upperCanvas = canvas.upperCanvasEl;
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const stopIfOnTarget = (event: Event) => {
+      if (!canvas) {
+        return;
+      }
+      const { target } = canvas.findTarget(event as PointerEvent);
+      if (target) {
+        event.stopPropagation();
+      }
+    };
+
+    for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) {
+      upperCanvas.addEventListener(type, stopIfOnTarget, { signal });
+    }
+
+    return () => {
+      controller.abort();
+    };
   });
 
   const imageContentMetrics = $derived.by(() => {
@@ -107,33 +141,49 @@
   };
 
   $effect(() => {
-    if (!canvas) {
+    const { offsetX, offsetY, contentWidth } = imageContentMetrics;
+
+    if (!canvas || contentWidth === 0) {
       return;
     }
 
-    canvas.setDimensions({
-      width: containerWidth,
-      height: containerHeight,
-    });
+    if (!initialized) {
+      initialized = true;
+      canvas.setDimensions({ width: containerWidth, height: containerHeight });
 
-    if (!faceRect) {
+      if (faceRect) {
+        faceRect.set({ top: offsetY + 200, left: offsetX + 200 });
+        faceRect.setCoords();
+      }
+
+      previousContentWidth = contentWidth;
+      previousOffsetX = offsetX;
+      previousOffsetY = offsetY;
+      positionFaceSelector();
       return;
     }
 
-    if (!isFaceRectIntersectingCanvas(faceRect, canvas)) {
-      setDefaultFaceRectanglePosition(faceRect);
+    canvas.setDimensions({ width: containerWidth, height: containerHeight });
+
+    if (faceRect && previousContentWidth > 0) {
+      const scaled = scaleFaceRectOnResize(
+        { left: faceRect.left, top: faceRect.top, scaleX: faceRect.scaleX, scaleY: faceRect.scaleY },
+        { previousOffsetX, previousOffsetY, previousContentWidth },
+        offsetX,
+        offsetY,
+        contentWidth,
+      );
+      faceRect.set(scaled);
+      faceRect.setCoords();
     }
+
+    previousContentWidth = contentWidth;
+    previousOffsetX = offsetX;
+    previousOffsetY = offsetY;
+
+    canvas.renderAll();
+    positionFaceSelector();
   });
-
-  const isFaceRectIntersectingCanvas = (faceRect: Rect, canvas: Canvas) => {
-    const faceBox = faceRect.getBoundingRect();
-    return !(
-      0 > faceBox.left + faceBox.width ||
-      0 > faceBox.top + faceBox.height ||
-      canvas.width < faceBox.left ||
-      canvas.height < faceBox.top
-    );
-  };
 
   const cancel = () => {
     isFaceEditMode.value = false;
@@ -163,11 +213,12 @@
     const gap = 15;
     const padding = faceRect.padding ?? 0;
     const rawBox = faceRect.getBoundingRect();
+    const { currentZoom, currentPositionX, currentPositionY } = assetViewerManager.zoomState;
     const faceBox = {
-      left: rawBox.left - padding,
-      top: rawBox.top - padding,
-      width: rawBox.width + padding * 2,
-      height: rawBox.height + padding * 2,
+      left: (rawBox.left - padding) * currentZoom + currentPositionX,
+      top: (rawBox.top - padding) * currentZoom + currentPositionY,
+      width: (rawBox.width + padding * 2) * currentZoom,
+      height: (rawBox.height + padding * 2) * currentZoom,
     };
     const selectorWidth = faceSelectorEl.offsetWidth;
     const chromeHeight = faceSelectorEl.offsetHeight - scrollableListEl.offsetHeight;
@@ -219,6 +270,17 @@
   };
 
   $effect(() => {
+    if (!canvas) {
+      return;
+    }
+
+    const { currentZoom, currentPositionX, currentPositionY } = assetViewerManager.zoomState;
+    canvas.setViewportTransform([currentZoom, 0, 0, currentZoom, currentPositionX, currentPositionY]);
+    canvas.renderAll();
+    positionFaceSelector();
+  });
+
+  $effect(() => {
     const rect = faceRect;
     if (rect) {
       rect.on('moving', positionFaceSelector);
@@ -235,7 +297,10 @@
       return;
     }
 
-    const { left, top, width, height } = faceRect.getBoundingRect();
+    const left = faceRect.left;
+    const top = faceRect.top;
+    const width = faceRect.getScaledWidth();
+    const height = faceRect.getScaledHeight();
     const { offsetX, offsetY, contentWidth, contentHeight } = imageContentMetrics;
     const natural = getNaturalSize(htmlElement);
 
@@ -299,10 +364,15 @@
 >
   <canvas bind:this={canvasEl} id="face-editor" class="absolute top-0 start-0"></canvas>
 
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     id="face-selector"
     bind:this={faceSelectorEl}
     class="absolute top-[calc(50%-250px)] start-[calc(50%-125px)] max-w-[250px] w-[250px] bg-white dark:bg-immich-dark-gray dark:text-immich-dark-fg backdrop-blur-sm px-2 py-4 rounded-xl border border-gray-200 dark:border-gray-800 transition-[top,left] duration-200 ease-out"
+    onpointerdown={(e) => e.stopPropagation()}
+    onpointermove={(e) => e.stopPropagation()}
+    onpointerup={(e) => e.stopPropagation()}
+    onwheel={(e) => e.stopPropagation()}
   >
     <p class="text-center text-sm">{$t('select_person_to_tag')}</p>
 

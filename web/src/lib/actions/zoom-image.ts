@@ -1,11 +1,11 @@
 import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
 import { createZoomImageWheel } from '@zoom-image/core';
 
-export const zoomImageAction = (node: HTMLElement, options?: { disabled?: boolean }) => {
+export const zoomImageAction = (node: HTMLElement, options?: { zoomTarget?: HTMLElement }) => {
   const zoomInstance = createZoomImageWheel(node, {
     maxZoom: 10,
     initialState: assetViewerManager.zoomState,
-    zoomTarget: null,
+    zoomTarget: options?.zoomTarget,
   });
 
   const unsubscribes = [
@@ -13,15 +13,12 @@ export const zoomImageAction = (node: HTMLElement, options?: { disabled?: boolea
     zoomInstance.subscribe(({ state }) => assetViewerManager.onZoomChange(state)),
   ];
 
-  const onInteractionStart = (event: Event) => {
-    if (options?.disabled) {
-      event.stopImmediatePropagation();
-    }
-    assetViewerManager.cancelZoomAnimation();
-  };
+  const cancelAnimation = () => assetViewerManager.cancelZoomAnimation();
 
-  node.addEventListener('wheel', onInteractionStart, { capture: true });
-  node.addEventListener('pointerdown', onInteractionStart, { capture: true });
+  const controller = new AbortController();
+  const { signal } = controller;
+
+  node.addEventListener('pointerdown', cancelAnimation, { capture: true, signal });
 
   // Suppress Safari's synthetic dblclick on double-tap. Without this, zoom-image's touchstart
   // handler zooms to maxZoom (10x), then Safari's synthetic dblclick triggers photo-viewer's
@@ -35,25 +32,25 @@ export const zoomImageAction = (node: HTMLElement, options?: { disabled?: boolea
       event.stopImmediatePropagation();
     }
   };
-  node.addEventListener('pointerdown', trackPointerType, { capture: true });
-  node.addEventListener('dblclick', suppressTouchDblClick, { capture: true });
+  node.addEventListener('pointerdown', trackPointerType, { capture: true, signal });
+  node.addEventListener('dblclick', suppressTouchDblClick, { capture: true, signal });
 
   // Allow zoomed content to render outside the container bounds
   node.style.overflow = 'visible';
   // Prevent browser handling of touch gestures so zoom-image can manage them
   node.style.touchAction = 'none';
   return {
-    update(newOptions?: { disabled?: boolean }) {
+    update(newOptions?: { zoomTarget?: HTMLElement }) {
       options = newOptions;
+      if (newOptions?.zoomTarget !== undefined) {
+        zoomInstance.setState({ zoomTarget: newOptions.zoomTarget });
+      }
     },
     destroy() {
+      controller.abort();
       for (const unsubscribe of unsubscribes) {
         unsubscribe();
       }
-      node.removeEventListener('wheel', onInteractionStart, { capture: true });
-      node.removeEventListener('pointerdown', onInteractionStart, { capture: true });
-      node.removeEventListener('pointerdown', trackPointerType, { capture: true });
-      node.removeEventListener('dblclick', suppressTouchDblClick, { capture: true });
       zoomInstance.cleanup();
     },
   };
