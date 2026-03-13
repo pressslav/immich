@@ -126,7 +126,7 @@ test.describe('zoom and face editor interaction', () => {
     await page.mouse.wheel(0, -1);
     await page.waitForTimeout(300);
 
-    const zoomedTransform = await page.locator('[data-viewer-content] img[draggable="false"]').evaluate((element) => {
+    const zoomedTransform = await page.getByTestId('preview').evaluate((element) => {
       return getComputedStyle(element.closest('[style*="transform"]') ?? element).transform;
     });
     const isZoomed = zoomedTransform !== 'none' && zoomedTransform !== '';
@@ -138,7 +138,7 @@ test.describe('zoom and face editor interaction', () => {
     await expect(page.locator('#face-editor')).toBeVisible();
 
     if (isZoomed) {
-      const afterTransform = await page.locator('[data-viewer-content] img[draggable="false"]').evaluate((element) => {
+      const afterTransform = await page.getByTestId('preview').evaluate((element) => {
         return getComputedStyle(element.closest('[style*="transform"]') ?? element).transform;
       });
       expect(afterTransform).not.toBe('none');
